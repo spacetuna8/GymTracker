@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="GymTracker" />
+  <title>GymTracker 💪</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body { background: #0f0f0f; color: #fff; font-family: -apple-system, system-ui, sans-serif; padding-bottom: 80px; }
+    input, button { font-family: inherit; }
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .header { background: #1a1a1a; padding: 16px 20px; border-bottom: 2px solid #f97316; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+    .header-title { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; color: #f97316; }
+    .content { padding: 20px 16px; max-width: 600px; margin: 0 auto; }
+    .nav { position: fixed; bottom: 0; left: 0; right: 0; background: #1a1a1a; border-top: 1px solid #2a2a2a; display: flex; padding-bottom: env(safe-area-inset-bottom); }
+    .nav button { flex: 1; padding: 12px 0; background: transparent; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; color: #666; font-size: 10px; }
+    .nav button.active { color: #f97316; font-weight: 700; }
+    .nav button span.icon { font-size: 20px; }
+    .card { background: #1a1a1a; border-radius: 12px; padding: 16px; border: 1px solid #2a2a2a; margin-bottom: 12px; }
+    .btn-primary { width: 100%; padding: 14px; background: #f97316; border: none; border-radius: 12px; color: #fff; font-weight: 700; font-size: 16px; cursor: pointer; }
+    .btn-secondary { width: 100%; padding: 14px; background: #1a1a1a; border: 1px solid #f97316; border-radius: 12px; color: #f97316; font-weight: 700; font-size: 15px; cursor: pointer; }
+    .btn-ghost { width: 100%; padding: 12px; background: #1a1a1a; border: 1px dashed #444; border-radius: 10px; color: #aaa; cursor: pointer; font-size: 14px; margin-bottom: 12px; }
+    .input { width: 100%; padding: 12px; background: #1a1a1a; border: 1px solid #f97316; border-radius: 10px; color: #fff; font-size: 15px; margin-bottom: 16px; }
+    .input-dark { padding: 8px 10px; background: #2a2a2a; border: 1px solid #333; border-radius: 8px; color: #fff; font-size: 14px; }
+    .label { color: #888; font-size: 12px; margin-bottom: 8px; letter-spacing: .5px; }
+    .tag { background: #2a2a2a; padding: 2px 10px; border-radius: 20px; font-size: 12px; color: #ccc; }
+    .chip { background: #1a1a1a; border: 1px solid #333; border-radius: 20px; padding: 4px 12px; color: #ccc; font-size: 12px; cursor: pointer; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: flex; align-items: flex-end; z-index: 100; }
+    .modal { background: #1a1a1a; border-radius: 20px 20px 0 0; padding: 20px; width: 100%; max-height: 70vh; overflow-y: auto; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+    .stat-card { background: #1a1a1a; border-radius: 12px; padding: 16px; border: 1px solid #2a2a2a; }
+    .exercise-card { background: #1a1a1a; border-radius: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid #2a2a2a; }
+    .set-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+    .set-input { padding: 8px; background: #2a2a2a; border: 1px solid #333; border-radius: 8px; color: #fff; text-align: center; font-size: 14px; width: 100%; }
+    .del-btn { background: #333; border: none; border-radius: 8px; color: #f87171; padding: 8px 12px; cursor: pointer; font-size: 14px; }
+    .add-set-btn { background: transparent; border: 1px dashed #f97316; border-radius: 8px; color: #f97316; padding: 6px 14px; cursor: pointer; font-size: 13px; margin-top: 4px; }
+    h2 { color: #f97316; margin-bottom: 16px; }
+    .empty { text-align: center; color: #666; margin-top: 60px; }
+    .empty .emoji { font-size: 48px; margin-bottom: 12px; }
+    svg circle { transition: stroke-dashoffset 1s linear; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title"><span>💪</span> GymTracker</div>
+  <span id="saving-indicator" style="color:#888;font-size:13px;display:none">Speichert...</span>
+</div>
+
+<div class="content" id="content"></div>
+
+<nav class="nav" id="nav"></nav>
+
+<div class="modal-overlay" id="modal" style="display:none"></div>
+
+<script>
+var ACCENT = "#f97316";
+var STORAGE_KEY = "gymtracker-data";
+var COMMON = ["Bankdrücken","Kniebeugen","Kreuzheben","Schulterdrücken","Klimmzüge","Bizeps Curls","Trizeps Dips","Beinpresse","Rudern","Lat Pulldown","Dips","Lunges"];
+
+var state = {
+  view: "home",
+  data: { workouts: [], templates: [] },
+  workoutName: "",
+  exercises: [{ name: "", sets: [{ reps: "", weight: "" }] }],
+  saveAsTemplate: false,
+  timer: { running: false, seconds: null, customMin: 3, interval: null }
+};
+
+function loadData() {
+  try {
+    var d = localStorage.getItem(STORAGE_KEY);
+    if (d) state.data = JSON.parse(d);
+    if (!state.data.templates) state.data.templates = [];
+  } catch(e) {}
+}
+
+function saveData() {
+  document.getElementById("saving-indicator").style.display = "inline";
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.data)); } catch(e) { alert("Fehler beim Speichern!"); }
+  setTimeout(function() { document.getElementById("saving-indicator").style.display = "none"; }, 800);
+}
+
+// ── Timer ────────────────────────────────────────────────────
+function startTimer() {
+  if (state.timer.interval) clearInterval(state.timer.interval);
+  state.timer.seconds = state.timer.customMin * 60;
+  state.timer.running = true;
+  state.timer.interval = setInterval(function() {
+    state.timer.seconds--;
+    if (state.timer.seconds <= 0) {
+      state.timer.seconds = 0;
+      state.timer.running = false;
+      clearInterval(state.timer.interval);
+    }
+    renderTimer();
+  }, 1000);
+  renderTimer();
+}
+
+function stopTimer() {
+  clearInterval(state.timer.interval);
+  state.timer.running = false;
+  state.timer.seconds = null;
+  renderTimer();
+}
+
+function fmtTime(s) {
+  s = s || 0;
+  return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}
+
+function renderTimer() {
+  var el = document.getElementById("rest-timer");
+  if (!el) return;
+  var t = state.timer;
+  var total = t.customMin * 60;
+  var pct = t.seconds !== null ? t.seconds / total : 1;
+  var r = 36, circ = 2 * Math.PI * r;
+  var offset = circ * (1 - pct);
+  el.innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;">' +
+      '<div style="position:relative;width:88px;height:88px;flex-shrink:0;">' +
+        '<svg width="88" height="88" style="transform:rotate(-90deg)">' +
+          '<circle cx="44" cy="44" r="' + r + '" fill="none" stroke="#2a2a2a" stroke-width="5"/>' +
+          '<circle cx="44" cy="44" r="' + r + '" fill="none" stroke="' + ACCENT + '" stroke-width="5" stroke-dasharray="' + circ + '" stroke-dashoffset="' + offset + '"/>' +
+        '</svg>' +
+        '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;">' +
+          '<span style="font-size:' + (t.running ? 16 : 13) + 'px;font-weight:700;color:' + (t.running ? ACCENT : "#888") + '">' +
+            (t.running ? fmtTime(t.seconds) : "Pause") +
+          '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div style="flex:1">' +
+        '<div class="label">PAUSENTIMER</div>' +
+        '<div style="display:flex;gap:6px;margin-bottom:8px;">' +
+          [1,2,3,5].map(function(m) {
+            return '<button onclick="setTimerMin(' + m + ')" style="padding:4px 10px;border-radius:20px;border:1px solid ' + (t.customMin === m ? ACCENT : "#333") + ';background:' + (t.customMin === m ? ACCENT + "22" : "transparent") + ';color:' + (t.customMin === m ? ACCENT : "#888") + ';font-size:12px;cursor:pointer">' + m + 'm</button>';
+          }).join("") +
+        '</div>' +
+        (t.running
+          ? '<button onclick="stopTimer()" style="width:100%;padding:8px;background:#333;border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer;font-size:13px">■ Stop</button>'
+          : '<button onclick="startTimer()" style="width:100%;padding:8px;background:' + ACCENT + ';border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer;font-size:13px">▶ Start</button>'
+        ) +
+        (t.seconds === 0 ? '<div style="color:#4ade80;font-size:12px;margin-top:4px">✅ Pause beendet!</div>' : '') +
+      '</div>' +
+    '</div>';
+}
+
+function setTimerMin(m) {
+  state.timer.customMin = m;
+  if (!state.timer.running) state.timer.seconds = null;
+  renderTimer();
+}
+
+// ── Nav ──────────────────────────────────────────────────────
+function renderNav() {
+  var items = [
+    { id: "home", icon: "🏠", label: "Home" },
+    { id: "log", icon: "➕", label: "Loggen" },
+    { id: "history", icon: "📋", label: "Verlauf" },
+    { id: "stats", icon: "📊", label: "Stats" },
+  ];
+  document.getElementById("nav").innerHTML = items.map(function(n) {
+    return '<button class="' + (state.view === n.id ? "active" : "") + '" onclick="setView(\'' + n.id + '\')">' +
+      '<span class="icon">' + n.icon + '</span>' + n.label + '</button>';
+  }).join("");
+}
+
+function setView(v) {
+  state.view = v;
+  render();
+}
+
+// ── Render ───────────────────────────────────────────────────
+function render() {
+  renderNav();
+  var c = document.getElementById("content");
+  if (state.view === "home") c.innerHTML = renderHome();
+  else if (state.view === "log") c.innerHTML = renderLog();
+  else if (state.view === "history") c.innerHTML = renderHistory();
+  else if (state.view === "stats") c.innerHTML = renderStats();
+  if (state.view === "log") renderTimer();
+}
+
+function renderHome() {
+  var w = state.data.workouts, t = state.data.templates;
+  var exCount = getExCount();
+  var topEx = Object.entries(exCount).sort(function(a,b){return b[1]-a[1];})[0];
+  var thisWeek = w.filter(function(x){ return new Date(x.date) > new Date(Date.now()-7*86400000); }).length;
+  var stats = [
+    { icon: "🏋️", value: w.length, label: "Workouts" },
+    { icon: "📑", value: t.length, label: "Vorlagen" },
+    { icon: "📅", value: thisWeek, label: "Diese Woche" },
+    { icon: "⭐", value: topEx ? topEx[0] : "–", label: "Top Übung", small: true },
+  ];
+  var html = '<h2>Willkommen zurück! 🔥</h2>' +
+    '<p style="color:#888;margin-bottom:24px">' + w.length + ' Workouts getrackt</p>' +
+    '<div class="grid2">' +
+    stats.map(function(s) {
+      return '<div class="stat-card"><div style="font-size:24px;margin-bottom:4px">' + s.icon + '</div>' +
+        '<div style="font-size:' + (s.small ? 14 : 28) + 'px;font-weight:700;color:' + ACCENT + '">' + s.value + '</div>' +
+        '<div style="color:#888;font-size:13px">' + s.label + '</div></div>';
+    }).join("") + '</div>';
+
+  if (w.length > 0) {
+    var last = w[0];
+    html += '<div class="card" style="margin-bottom:16px">' +
+      '<div class="label">LETZTES WORKOUT</div>' +
+      '<div style="font-weight:700;font-size:16px">' + esc(last.name) + '</div>' +
+      '<div style="color:#888;font-size:13px">' + fmtDate(last.date, true) + '</div>' +
+      '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">' +
+      last.exercises.map(function(e){ return '<span class="tag">' + esc(e.name) + '</span>'; }).join("") +
+      '</div></div>';
+  }
+
+  html += '<div style="display:flex;gap:10px">' +
+    '<button class="btn-primary" onclick="setView(\'log\')" style="flex:1">➕ Neues Workout</button>';
+  if (t.length > 0) {
+    html += '<button class="btn-secondary" onclick="openTemplateModal()" style="flex:1">📑 Vorlage starten</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderLog() {
+  var ex = state.exercises;
+  var html = '<h2>Workout loggen</h2>' +
+    '<div id="rest-timer" class="card"></div>' +
+    '<input class="input" placeholder="Workout-Name (z.B. Push Day)" value="' + esc(state.workoutName) + '" oninput="state.workoutName=this.value" />' +
+    '<div style="margin-bottom:16px"><div class="label">SCHNELL HINZUFÜGEN</div>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+    COMMON.map(function(e) {
+      return '<button class="chip" onclick="addExercise(\'' + esc(e) + '\')">' + esc(e) + '</button>';
+    }).join("") + '</div></div>';
+
+  ex.forEach(function(e, eIdx) {
+    html += '<div class="exercise-card">' +
+      '<div style="display:flex;gap:8px;margin-bottom:10px">' +
+      '<input class="input-dark" style="flex:1" placeholder="Übungsname" value="' + esc(e.name) + '" oninput="updateExName(' + eIdx + ',this.value)" />' +
+      '<button class="del-btn" onclick="removeExercise(' + eIdx + ')">✕</button></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-bottom:8px">' +
+      '<div style="color:#666;font-size:11px;text-align:center">WDHLG.</div>' +
+      '<div style="color:#666;font-size:11px;text-align:center">KG</div><div></div></div>';
+    e.sets.forEach(function(s, sIdx) {
+      html += '<div class="set-row">' +
+        '<input type="number" class="set-input" placeholder="12" value="' + esc(s.reps) + '" oninput="updateSet(' + eIdx + ',' + sIdx + ',\'reps\',this.value)" />' +
+        '<input type="number" class="set-input" placeholder="60" value="' + esc(s.weight) + '" oninput="updateSet(' + eIdx + ',' + sIdx + ',\'weight\',this.value)" />' +
+        '<button onclick="removeSet(' + eIdx + ',' + sIdx + ')" style="background:#2a2a2a;border:none;border-radius:8px;color:#666;padding:8px 10px;cursor:pointer;font-size:12px">✕</button></div>';
+    });
+    html += '<button class="add-set-btn" onclick="addSet(' + eIdx + ')">+ Satz</button></div>';
+  });
+
+  html += '<button class="btn-ghost" onclick="addExercise(\'\')">+ Übung hinzufügen</button>';
+  html += '<div onclick="toggleTemplate()" style="display:flex;align-items:center;gap:10px;background:#1a1a1a;padding:12px 14px;border-radius:10px;border:1px solid ' + (state.saveAsTemplate ? ACCENT : "#2a2a2a") + ';cursor:pointer;margin-bottom:12px">' +
+    '<div style="width:20px;height:20px;border-radius:4px;background:' + (state.saveAsTemplate ? ACCENT : "#2a2a2a") + ';border:2px solid ' + (state.saveAsTemplate ? ACCENT : "#444") + ';display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff">' + (state.saveAsTemplate ? "✓" : "") + '</div>' +
+    '<span style="color:' + (state.saveAsTemplate ? ACCENT : "#888") + ';font-size:14px">Als Vorlage speichern</span></div>';
+  html += '<button class="btn-primary" onclick="saveWorkout()">💾 Workout speichern</button>';
+  return html;
+}
+
+function renderHistory() {
+  var w = state.data.workouts;
+  if (!w.length) return '<div class="empty"><div class="emoji">🏋️</div><p style="margin-bottom:16px">Noch keine Workouts geloggt.</p><button class="btn-primary" style="width:auto;padding:10px 24px" onclick="setView(\'log\')">Jetzt starten</button></div>';
+  return '<h2>Verlauf</h2>' + w.map(function(wo) {
+    return '<div class="card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+      '<div><div style="font-weight:700;font-size:16px">' + esc(wo.name) + '</div>' +
+      '<div style="color:#888;font-size:13px">' + fmtDate(wo.date, true) + '</div></div>' +
+      '<button onclick="deleteWorkout(' + wo.id + ')" style="background:transparent;border:none;color:#666;cursor:pointer;font-size:18px">🗑</button></div>' +
+      '<div style="margin-top:10px">' +
+      wo.exercises.map(function(e) {
+        return '<div style="margin-bottom:6px"><span style="color:' + ACCENT + ';font-weight:600;font-size:14px">' + esc(e.name) + '</span>' +
+          '<span style="color:#888;font-size:13px;margin-left:8px">' + e.sets.length + ' Sätze' + (e.sets[0] && e.sets[0].weight ? ' · ' + e.sets[0].weight + 'kg' : '') + '</span></div>';
+      }).join("") + '</div></div>';
+  }).join("");
+}
+
+function renderStats() {
+  var w = state.data.workouts;
+  if (w.length < 2) return '<div class="empty"><div class="emoji">📊</div><p>Logge mindestens 2 Workouts für Statistiken.</p></div>';
+  var exCount = getExCount();
+  var top = Object.entries(exCount).sort(function(a,b){return b[1]-a[1];}).slice(0,5);
+  var statsNums = [
+    { label: "Workouts", value: w.length },
+    { label: "Übungen", value: Object.keys(exCount).length },
+    { label: "Ø Übungen", value: (w.reduce(function(s,x){return s+x.exercises.length;},0)/w.length).toFixed(1) }
+  ];
+
+  // Bar chart via canvas-free SVG bars
+  var chartData = w.slice().reverse().slice(-8).map(function(x) {
+    return {
+      date: new Date(x.date).toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"}),
+      vol: x.exercises.reduce(function(s,e){return s+e.sets.reduce(function(s2,st){return s2+(parseFloat(st.weight)||0)*(parseInt(st.reps)||0);},0);},0)
+    };
+  });
+  var maxVol = Math.max.apply(null, chartData.map(function(d){return d.vol;})) || 1;
+  var bw = 100 / chartData.length;
+  var bars = chartData.map(function(d, i) {
+    var h = Math.max(4, (d.vol / maxVol) * 140);
+    var x = i * bw + bw * 0.1;
+    var bwInner = bw * 0.8;
+    return '<g>' +
+      '<rect x="' + x + '%" y="' + (150 - h) + '" width="' + bwInner + '%" height="' + h + '" fill="' + ACCENT + '" rx="3"/>' +
+      '<text x="' + (x + bwInner/2) + '%" y="168" text-anchor="middle" fill="#666" font-size="9">' + d.date + '</text>' +
+    '</g>';
+  }).join("");
+
+  var html = '<h2>Statistiken</h2>' +
+    '<div class="card"><div class="label">VOLUMEN (kg) PRO WORKOUT</div>' +
+    '<svg width="100%" height="180" style="overflow:visible">' +
+      '<line x1="0" y1="150" x2="100%" y2="150" stroke="#2a2a2a" stroke-width="1"/>' +
+      bars +
+    '</svg></div>' +
+    '<div class="card"><div class="label">TOP ÜBUNGEN</div>' +
+    top.map(function(e, i) {
+      return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">' +
+        '<div style="width:24px;color:' + ACCENT + ';font-weight:700">#' + (i+1) + '</div>' +
+        '<div style="flex:1"><div style="font-size:14px;font-weight:600">' + esc(e[0]) + '</div>' +
+        '<div style="background:#2a2a2a;border-radius:4px;height:6px;margin-top:4px">' +
+        '<div style="background:' + ACCENT + ';height:6px;border-radius:4px;width:' + ((e[1]/top[0][1])*100) + '%"></div></div></div>' +
+        '<div style="color:#888;font-size:13px">' + e[1] + 'x</div></div>';
+    }).join("") + '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">' +
+    statsNums.map(function(s) {
+      return '<div class="card" style="text-align:center;margin-bottom:0"><div style="font-size:22px;font-weight:700;color:' + ACCENT + '">' + s.value + '</div><div style="color:#888;font-size:12px">' + s.label + '</div></div>';
+    }).join("") + '</div>';
+  return html;
+}
+
+// ── Actions ──────────────────────────────────────────────────
+function addExercise(name) {
+  state.exercises.push({ name: name, sets: [{ reps: "", weight: "" }] });
+  render();
+}
+function removeExercise(i) {
+  state.exercises.splice(i, 1);
+  if (!state.exercises.length) state.exercises = [{ name: "", sets: [{ reps: "", weight: "" }] }];
+  render();
+}
+function updateExName(i, v) { state.exercises[i].name = v; }
+function addSet(i) { state.exercises[i].sets.push({ reps: "", weight: "" }); render(); }
+function removeSet(ei, si) { state.exercises[ei].sets.splice(si, 1); render(); }
+function updateSet(ei, si, field, v) { state.exercises[ei].sets[si][field] = v; }
+function toggleTemplate() { state.saveAsTemplate = !state.saveAsTemplate; render(); }
+
+function saveWorkout() {
+  if (!state.workoutName.trim()) return alert("Bitte einen Workout-Namen eingeben.");
+  var valid = state.exercises.filter(function(e){ return e.name.trim(); });
+  if (!valid.length) return alert("Mindestens eine Übung hinzufügen.");
+  var workout = {
+    id: Date.now(), name: state.workoutName, date: new Date().toISOString(),
+    exercises: valid.map(function(e){ return { name: e.name, sets: e.sets.filter(function(s){ return s.reps || s.weight; }) }; })
+  };
+  state.data.workouts.unshift(workout);
+  if (state.saveAsTemplate) {
+    state.data.templates.unshift({ id: Date.now()+1, name: state.workoutName, exercises: valid.map(function(e){ return { name: e.name, sets: [] }; }) });
+  }
+  saveData();
+  state.workoutName = ""; state.exercises = [{ name: "", sets: [{ reps: "", weight: "" }] }]; state.saveAsTemplate = false;
+  setView("history");
+}
+
+function deleteWorkout(id) {
+  if (!confirm("Workout löschen?")) return;
+  state.data.workouts = state.data.workouts.filter(function(w){ return w.id !== id; });
+  saveData(); render();
+}
+
+function openTemplateModal() {
+  var t = state.data.templates;
+  var inner = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+    '<h3 style="color:' + ACCENT + '">📑 Vorlage wählen</h3>' +
+    '<button onclick="closeModal()" style="background:transparent;border:none;color:#888;font-size:22px;cursor:pointer">✕</button></div>' +
+    t.map(function(tpl) {
+      return '<div style="background:#2a2a2a;border-radius:12px;padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">' +
+        '<div><div style="font-weight:700;font-size:15px">' + esc(tpl.name) + '</div>' +
+        '<div style="color:#888;font-size:13px;margin-top:4px">' + tpl.exercises.map(function(e){return esc(e.name);}).join(" · ") + '</div></div>' +
+        '<div style="display:flex;gap:8px">' +
+        '<button onclick="loadTemplate(' + tpl.id + ')" style="background:' + ACCENT + ';border:none;border-radius:8px;color:#fff;padding:8px 14px;cursor:pointer;font-weight:700;font-size:13px">▶ Start</button>' +
+        '<button onclick="deleteTemplate(' + tpl.id + ')" style="background:#333;border:none;border-radius:8px;color:#f87171;padding:8px 10px;cursor:pointer">🗑</button>' +
+        '</div></div>';
+    }).join("");
+  var modal = document.getElementById("modal");
+  modal.style.display = "flex";
+  modal.innerHTML = '<div class="modal" onclick="event.stopPropagation()">' + inner + '</div>';
+  modal.onclick = closeModal;
+}
+
+function closeModal() { document.getElementById("modal").style.display = "none"; }
+
+function loadTemplate(id) {
+  var tpl = state.data.templates.find(function(t){ return t.id === id; });
+  if (!tpl) return;
+  state.workoutName = tpl.name;
+  state.exercises = tpl.exercises.map(function(e){ return { name: e.name, sets: [{ reps: "", weight: "" }] }; });
+  closeModal();
+  setView("log");
+}
+
+function deleteTemplate(id) {
+  if (!confirm("Vorlage löschen?")) return;
+  state.data.templates = state.data.templates.filter(function(t){ return t.id !== id; });
+  saveData();
+  if (!state.data.templates.length) { closeModal(); render(); }
+  else openTemplateModal();
+}
+
+// ── Helpers ──────────────────────────────────────────────────
+function getExCount() {
+  var c = {};
+  state.data.workouts.forEach(function(w){ w.exercises.forEach(function(e){ c[e.name] = (c[e.name]||0)+1; }); });
+  return c;
+}
+function fmtDate(iso, long) {
+  var d = new Date(iso);
+  if (long) return d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+}
+function esc(s) {
+  return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+// ── Init ─────────────────────────────────────────────────────
+loadData();
+render();
+</script>
+</body>
+</html>
