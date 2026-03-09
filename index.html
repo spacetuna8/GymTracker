@@ -158,14 +158,13 @@ var BUILTIN_EXERCISES=[
 // ─────────────────────────────────────────────────────────────
 // STATE
 // ─────────────────────────────────────────────────────────────
-var settings={defaultRestMin:3,profileName:""};
+var settings={profileName:""};
 var state={
   view:"home", statsTab:"volume", _exTab:null,
   data:{workouts:[],templates:[],bodyweight:[],customExercises:[]},
   workoutName:"", exercises:[{name:"",muscle:"",sets:[{reps:"",weight:""}]}],
   notes:"", saveAsTemplate:false, editingId:null,
   workoutElapsed:0, workoutStartTime:null, workoutTimerInterval:null,
-  timer:{running:false,seconds:null,customMin:3,interval:null},
   calOffset:0, selectedExercise:"",
   historyFilter:"All", historySearch:"",
   editingTplId:null, tplName:"", tplExercises:[]
@@ -317,8 +316,7 @@ function loadData(){
   }catch(e){}
   try{
     var s=localStorage.getItem(SK_SETTINGS);
-    if(s){var ps=JSON.parse(s);settings.defaultRestMin=ps.defaultRestMin||3;settings.profileName=ps.profileName||"";}
-    state.timer.customMin=settings.defaultRestMin;
+    if(s){var ps=JSON.parse(s);settings.profileName=ps.profileName||"";}
   }catch(e){}
   invalidateCache();
 }
@@ -338,7 +336,6 @@ function muscleColor(m){return MUSCLE_COLORS[m]||"#666";}
 function muscleTagHTML(m){return'<span class="muscle-tag" style="background:'+muscleColor(m)+'22;color:'+muscleColor(m)+'">'+m+'</span>';}
 function fmtDuration(s){var h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;return h>0?pad(h)+":"+pad(m)+":"+pad(sc):pad(m)+":"+pad(sc);}
 function pad(n){return String(n).padStart(2,"0");}
-function fmtTime(s){s=s||0;return pad(Math.floor(s/60))+":"+pad(s%60);}
 var _fmtDateCache=new Map();
 var _fmtDateShortCache=new Map();
 function fmtDate(iso){
@@ -428,70 +425,6 @@ function startWorkoutTimer(){
 }
 function stopWorkoutTimer(){clearInterval(state.workoutTimerInterval);state.workoutTimerInterval=null;}
 
-function startTimer(){
-  if(state.timer.interval)clearInterval(state.timer.interval);
-  state.timer.seconds=state.timer.customMin*60;state.timer.running=true;
-  rerenderRestTimer();
-  state.timer.interval=setInterval(function(){
-    state.timer.seconds--;
-    if(state.timer.seconds<=0){state.timer.seconds=0;state.timer.running=false;clearInterval(state.timer.interval);rerenderRestTimer();return;}
-    renderRestTimer();
-  },1000);
-}
-function stopTimer(){clearInterval(state.timer.interval);state.timer.running=false;state.timer.seconds=null;rerenderRestTimer();}
-function setTimerMin(m){state.timer.customMin=m;if(!state.timer.running)state.timer.seconds=null;rerenderRestTimer();}
-function renderRestTimer(){
-  var el=document.getElementById("rest-timer");if(!el)return;
-  var t=state.timer,total=t.customMin*60,pct=t.seconds!==null?t.seconds/total:1;
-  var r=36,circ=2*Math.PI*r,offset=circ*(1-pct);
-
-  // If skeleton already exists, only patch the changing parts (avoids full DOM rebuild every second)
-  var arc=document.getElementById("rt-arc");
-  if(arc){
-    arc.setAttribute("stroke-dashoffset",offset.toFixed(2));
-    var label=document.getElementById("rt-label");
-    if(label){
-      label.textContent=t.running?fmtTime(t.seconds):"Rest";
-      label.style.color=t.running?ACCENT:"#666";
-      label.style.fontSize=(t.running?15:12)+"px";
-    }
-    var done=document.getElementById("rt-done");
-    if(done)done.style.display=t.seconds===0?"block":"none";
-    return;
-  }
-
-  // First render — build full structure
-  var parts=[
-    '<div style="display:flex;align-items:center;gap:12px">',
-    '<div style="position:relative;width:88px;height:88px;flex-shrink:0">',
-    '<svg width="88" height="88" style="transform:rotate(-90deg)">',
-    '<circle cx="44" cy="44" r="'+r+'" fill="none" stroke="#1c1c1c" stroke-width="6"/>',
-    '<circle id="rt-arc" cx="44" cy="44" r="'+r+'" fill="none" stroke="'+ACCENT+'" stroke-width="6"',
-    ' stroke-dasharray="'+circ+'" stroke-dashoffset="'+offset.toFixed(2)+'"',
-    ' stroke-linecap="round" style="transition:stroke-dashoffset 1s linear"/></svg>',
-    '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">',
-    '<span id="rt-label" style="font-size:'+(t.running?15:12)+'px;font-weight:700;color:'+(t.running?ACCENT:"#666")+'">',
-    (t.running?fmtTime(t.seconds):"Rest"),'</span></div></div>',
-    '<div style="flex:1"><div class="label">REST TIMER</div>',
-    '<div style="display:flex;gap:6px;margin-bottom:8px">'
-  ];
-  [1,2,3,5].forEach(function(m){
-    parts.push('<button onclick="setTimerMin('+m+')" style="padding:5px 10px;border-radius:20px;border:1px solid '+(t.customMin===m?ACCENT:"#2e2e2e")+';background:'+(t.customMin===m?ACCENT+"22":"transparent")+';color:'+(t.customMin===m?ACCENT:"#666")+';font-size:12px;cursor:pointer">'+m+'m</button>');
-  });
-  parts.push('</div>');
-  parts.push(!t.running
-    ?'<button id="rt-btn" onclick="startTimer()" style="width:100%;padding:8px;background:'+ACCENT+';border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer;font-size:13px">▶ Start</button>'
-    :'<button id="rt-btn" onclick="stopTimer()" style="width:100%;padding:8px;background:#252525;border:none;border-radius:8px;color:#fff;font-weight:700;cursor:pointer;font-size:13px">■ Stop</button>');
-  parts.push('<div id="rt-done" style="color:var(--green);font-size:12px;margin-top:4px;font-weight:600;display:'+(t.seconds===0?"block":"none")+'">✅ Rest complete!</div>');
-  parts.push('</div></div>');
-  el.innerHTML=parts.join("");
-}
-// Called when timer state changes structurally (start/stop/change min) — forces full re-render
-function rerenderRestTimer(){
-  var el=document.getElementById("rest-timer");if(!el)return;
-  var arc=document.getElementById("rt-arc");if(arc)arc.id=""; // invalidate skeleton so renderRestTimer does a full rebuild
-  renderRestTimer(); // renderRestTimer already writes the correct button state — nothing more needed
-}
 
 // ─────────────────────────────────────────────────────────────
 // AUTOCOMPLETE
@@ -760,11 +693,10 @@ function openLog(tplId){
   state.editingId=null;
   if(tplId!==undefined){
     var tpl=state.data.templates.find(function(t){return t.id===tplId;});
-    if(tpl){state.workoutName=tpl.name;state.exercises=tpl.exercises.map(function(e){return{name:e.name,muscle:e.muscle||guessMuscle(e.name),sets:[{reps:"",weight:""}]};});}
-  }else{state.workoutName="";state.exercises=[{name:"",muscle:"",sets:[{reps:"",weight:""}]}];}
+    if(tpl){state.workoutName=tpl.name;state.exercises=tpl.exercises.map(function(e){return{name:e.name,muscle:e.muscle||guessMuscle(e.name),notes:"",sets:[{reps:"",weight:""}]};});}
+  }else{state.workoutName="";state.exercises=[{name:"",muscle:"",notes:"",sets:[{reps:"",weight:""}]}];}
   prefillLastValues();
   state.notes="";state.saveAsTemplate=false;state.workoutElapsed=0;state.workoutStartTime=null;
-  state.timer.customMin=settings.defaultRestMin;
   renderLogModal();startWorkoutTimer();
 }
 function prefillLastValues(){
@@ -774,13 +706,13 @@ function prefillLastValues(){
     if(!ex.name.trim())return ex;
     var prevEx=lw.exercises.find(function(e){return e.name.toLowerCase()===ex.name.toLowerCase();});
     if(!prevEx||!prevEx.sets.length)return ex;
-    return Object.assign({},ex,{sets:prevEx.sets.map(function(s){return{reps:s.reps||"",weight:s.weight||""};})});
+    return Object.assign({},ex,{notes:prevEx.notes||"",sets:prevEx.sets.map(function(s){return{reps:s.reps||"",weight:s.weight||""};})});
   });
 }
 function openEdit(id){
   var wo=state.data.workouts.find(function(w){return w.id===id;});if(!wo)return;
   state.editingId=id;state.workoutName=wo.name;
-  state.exercises=wo.exercises.map(function(e){return{name:e.name,muscle:e.muscle||guessMuscle(e.name),sets:e.sets.length?e.sets.map(function(s){return{reps:s.reps||"",weight:s.weight||""};}):[{reps:"",weight:""}]};});
+  state.exercises=wo.exercises.map(function(e){return{name:e.name,muscle:e.muscle||guessMuscle(e.name),notes:e.notes||"",sets:e.sets.length?e.sets.map(function(s){return{reps:s.reps||"",weight:s.weight||""};}):[{reps:"",weight:""}]};});
   state.notes=wo.notes||"";state.saveAsTemplate=false;state.workoutElapsed=0;
   stopWorkoutTimer();renderLogModal(true);
 }
@@ -793,6 +725,7 @@ function syncInputsToState(){
   var notesEl=document.getElementById("wt-notes");if(notesEl)state.notes=notesEl.value;
   state.exercises.forEach(function(ex,ei){
     var ni=document.getElementById("en-"+ei);if(ni){ex.name=ni.value;if(!ex.muscle)ex.muscle=guessMuscle(ex.name);}
+    var xn=document.getElementById("exnotes-"+ei);if(xn)ex.notes=xn.value;
     ex.sets.forEach(function(s,si){
       var r=document.getElementById("sr-"+ei+"-"+si),w=document.getElementById("sw-"+ei+"-"+si);
       if(r)s.reps=r.value;if(w)s.weight=w.value;
@@ -803,12 +736,10 @@ function doStructural(fn){syncInputsToState();closeAllAC();fn();rebuildLogBody()
 function renderLogModal(isEdit){
   var modal=document.getElementById("modal");modal.style.display="flex";modal.onclick=null;
   modal.innerHTML='<div class="modal" onclick="event.stopPropagation()" id="lmi">'+buildLogHTML(isEdit)+'</div>';
-  if(!isEdit)renderRestTimer();
 }
 function rebuildLogBody(){
   var inner=document.getElementById("lmi");if(!inner)return;
   var sy=inner.scrollTop;inner.innerHTML=buildLogHTML(!!state.editingId);inner.scrollTop=sy;
-  if(!state.editingId)renderRestTimer();
 }
 function buildLogHTML(isEdit){
   var ex=state.exercises;
@@ -818,8 +749,7 @@ function buildLogHTML(isEdit){
   if(!isEdit){
     parts.push('<div class="card" style="text-align:center;padding:12px;margin-bottom:12px">',
       '<div class="label">WORKOUT DURATION</div>',
-      '<div class="workout-timer" id="workout-elapsed">'+fmtDuration(state.workoutElapsed)+'</div></div>',
-      '<div id="rest-timer" class="card"></div>');
+      '<div class="workout-timer" id="workout-elapsed">'+fmtDuration(state.workoutElapsed)+'</div></div>');
   }
   parts.push('<input id="wn-input" class="input" placeholder="Workout name (e.g. Push Day)" value="'+esc(state.workoutName)+'" onblur="state.workoutName=this.value" />');
 
@@ -856,7 +786,9 @@ function buildLogHTML(isEdit){
         prevSets.slice(0,4).map(function(s){return(s.weight?s.weight+'kg':'')+(s.reps?' × '+s.reps:'');}).join(' · ')+
         (prevSets.length>4?' …':'')+'</div>');
     }
-    parts.push('<button class="add-set-btn" onclick="doStructural(function(){addSet('+eIdx+')})">+ Set</button></div>');
+    parts.push('<button class="add-set-btn" onclick="doStructural(function(){addSet('+eIdx+')})">+ Set</button>');
+    parts.push('<textarea id="exnotes-'+eIdx+'" class="textarea-dark" rows="1" placeholder="Exercise notes…" style="margin-top:8px;font-size:12px" onblur="state.exercises['+eIdx+'].notes=this.value">'+esc(e.notes||'')+'</textarea>');
+    parts.push('</div>');
   });
 
   parts.push('<button class="btn-ghost" onclick="doStructural(function(){addExercise()})">+ Add exercise</button>',
@@ -909,7 +841,7 @@ function render(){
     else if(state.view==="settings")html=renderSettings();
     c.innerHTML=html;
     if(state.view==="history"){
-      // Defer swipe init to after paint
+      renderHistoryList();
       requestAnimationFrame(initAllSwipes);
     }
   });
@@ -1085,7 +1017,9 @@ function renderHistoryList(){
     wo.exercises.forEach(function(e){
       parts.push('<div style="margin-bottom:5px">',
         '<span style="color:'+ACCENT+';font-weight:600;font-size:14px">'+esc(e.name)+'</span>',
-        '<span style="color:#555;font-size:13px;margin-left:8px">'+e.sets.length+' sets'+(e.sets[0]&&e.sets[0].weight?' · '+e.sets[0].weight+'kg':'')+'</span></div>');
+        '<span style="color:#555;font-size:13px;margin-left:8px">'+e.sets.length+' sets'+(e.sets[0]&&e.sets[0].weight?' · '+e.sets[0].weight+'kg':'')+'</span>',
+        (e.notes?'<div style="color:#555;font-size:12px;font-style:italic;margin-top:2px">'+esc(e.notes)+'</div>':''),
+        '</div>');
     });
     parts.push('</div>');
     if(wo.notes)parts.push('<div style="margin-top:8px;padding-top:8px;border-top:1px solid #1c1c1c;color:#555;font-size:13px;font-style:italic">'+esc(wo.notes)+'</div>');
@@ -1211,13 +1145,10 @@ function selectExercise(name){state.selectedExercise=name;state._exTab=null;var 
 // SETTINGS VIEW
 // ─────────────────────────────────────────────────────────────
 function renderSettings(){
-  var restOpts=[1,2,3,5].map(function(m){return'<option value="'+m+'"'+(settings.defaultRestMin===m?' selected':'')+'>'+m+' min</option>';}).join("");
   return'<h2>Settings</h2>'+
     '<div class="card">'+
     '<div class="settings-row"><div><div style="font-weight:600">Profile Name</div><div style="color:#555;font-size:13px">Shown on home screen</div></div>'+
     '<input class="input-dark" style="width:120px" placeholder="Your name" value="'+esc(settings.profileName)+'" onblur="updateSettingStr(\'profileName\',this.value)" /></div>'+
-    '<div class="settings-row"><div><div style="font-weight:600">Default Rest Timer</div><div style="color:#555;font-size:13px">Applied to all new workouts</div></div>'+
-    '<select class="select-sm" onchange="updateSetting(\'defaultRestMin\',parseInt(this.value))">'+restOpts+'</select></div>'+
     '</div>'+
     '<div class="card"><div class="label">DATA</div>'+
     '<button onclick="exportData()" style="width:100%;padding:12px;background:transparent;border:1px solid '+ACCENT+';border-radius:10px;color:'+ACCENT+';font-weight:700;font-size:14px;cursor:pointer;margin-bottom:10px">⬇ Export Backup (JSON)</button>'+
@@ -1226,7 +1157,7 @@ function renderSettings(){
     '<div class="card"><div class="label">ABOUT</div>'+
     '<div style="color:#555;font-size:13px;line-height:1.7">GymTracker v13<br>All data stored locally on your device.<br>Use Export to back up before clearing Safari data.</div></div>';
 }
-function updateSetting(key,val){settings[key]=val;saveSettings();if(key==="defaultRestMin")state.timer.customMin=val;}
+function updateSetting(key,val){settings[key]=val;saveSettings();}
 function updateSettingStr(key,val){settings[key]=val;saveSettings();}
 function confirmReset(){if(confirm("Delete ALL data? This cannot be undone!")&&confirm("Last chance!"))resetAllData();}
 function resetAllData(){state.data={workouts:[],templates:[],bodyweight:[],customExercises:[]};saveData(true);invalidateCache();render();}
@@ -1234,8 +1165,8 @@ function resetAllData(){state.data={workouts:[],templates:[],bodyweight:[],custo
 // ─────────────────────────────────────────────────────────────
 // WORKOUT ACTIONS
 // ─────────────────────────────────────────────────────────────
-function addExercise(){state.exercises.push({name:"",muscle:"",sets:[{reps:"",weight:""}]});}
-function removeExercise(i){state.exercises.splice(i,1);if(!state.exercises.length)state.exercises=[{name:"",muscle:"",sets:[{reps:"",weight:""}]}];}
+function addExercise(){state.exercises.push({name:"",muscle:"",notes:"",sets:[{reps:"",weight:""}]});}
+function removeExercise(i){state.exercises.splice(i,1);if(!state.exercises.length)state.exercises=[{name:"",muscle:"",notes:"",sets:[{reps:"",weight:""}]}];}
 function updateExMuscle(i,v){state.exercises[i].muscle=v;}
 function addSet(i){state.exercises[i].sets.push({reps:"",weight:""});}
 function copyLastSet(i){var sets=state.exercises[i].sets;if(!sets.length)return;var last=sets[sets.length-1];state.exercises[i].sets.push({reps:last.reps,weight:last.weight});}
@@ -1247,7 +1178,7 @@ function saveWorkout(){
   if(!state.workoutName.trim())return alert("Please enter a workout name.");
   var valid=state.exercises.filter(function(e){return e.name.trim();});
   if(!valid.length)return alert("Please add at least one exercise.");
-  var exData=valid.map(function(e){return{name:e.name,muscle:e.muscle||guessMuscle(e.name),sets:e.sets.filter(function(s){return s.reps||s.weight;}).map(function(s){return{reps:s.reps,weight:s.weight};})};});
+  var exData=valid.map(function(e){return{name:e.name,muscle:e.muscle||guessMuscle(e.name),notes:e.notes||"",sets:e.sets.filter(function(s){return s.reps||s.weight;}).map(function(s){return{reps:s.reps,weight:s.weight};})};});
   // Auto-save new exercises to library
   valid.forEach(function(e){if(e.name.trim()&&!getLibraryExercise(e.name))saveCustomExercise(e.name,e.muscle||guessMuscle(e.name));});
   if(state.editingId){
@@ -1265,7 +1196,7 @@ function saveWorkout(){
       _cache.allExNames=null;
       _cache.streak=null;
     }
-    saveData(true);state.workoutName="";state.exercises=[{name:"",muscle:"",sets:[{reps:"",weight:""}]}];state.notes="";state.editingId=null;
+    saveData(true);state.workoutName="";state.exercises=[{name:"",muscle:"",notes:"",sets:[{reps:"",weight:""}]}];state.notes="";state.editingId=null;
     document.getElementById("modal").style.display="none";setView("history");
   }else{
     stopWorkoutTimer();
@@ -1274,7 +1205,7 @@ function saveWorkout(){
     if(state.saveAsTemplate)state.data.templates.unshift({id:genId(),name:state.workoutName,exercises:valid.map(function(e){return{name:e.name,muscle:e.muscle||guessMuscle(e.name),sets:[]};})});
     saveData(true);
     invalidateCache();
-    state.workoutName="";state.exercises=[{name:"",muscle:"",sets:[{reps:"",weight:""}]}];state.notes="";state.saveAsTemplate=false;state.workoutElapsed=0;
+    state.workoutName="";state.exercises=[{name:"",muscle:"",notes:"",sets:[{reps:"",weight:""}]}];state.notes="";state.saveAsTemplate=false;state.workoutElapsed=0;
     document.getElementById("modal").style.display="none";
     showSummary(workout);
   }
@@ -1309,7 +1240,6 @@ function importData(){
         if(!confirm("Replace all data?"))return;
         // FIX: stop any running timers before replacing state — prevents leaked intervals
         if(state.workoutTimerInterval){clearInterval(state.workoutTimerInterval);state.workoutTimerInterval=null;}
-        if(state.timer.interval){clearInterval(state.timer.interval);state.timer.interval=null;}
         state.data=p;
         if(!state.data.templates)state.data.templates=[];
         if(!state.data.bodyweight)state.data.bodyweight=[];
