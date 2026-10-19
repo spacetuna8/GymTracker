@@ -1,42 +1,44 @@
-// Bump CACHE whenever you deploy so iPhones drop the old app shell.
-// Clearing caches never touches localStorage, so your denim data is safe.
-const CACHE = 'denim-v25';
+// Bump VERSION on every upload so phones fetch the new app.
+const VERSION = "gt-2.4.2";
+const CORE = ["./", "index.html", "manifest.json", "icon-180.png", "icon-512.png"];
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(['./', './index.html', './icon-180.png', './icon-512.png', './manifest.json'])));
-  self.skipWaiting();
+self.addEventListener("install", e => {
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
 });
 
-self.addEventListener('activate', e => {
+self.addEventListener("activate", e => {
   e.waitUntil(
     caches.keys()
-      .then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', e => {
+self.addEventListener("fetch", e => {
   const req = e.request;
-  if (req.method !== 'GET') return;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
 
-  // App page: network first (revalidating past GitHub Pages' 10-min HTTP cache) so updates arrive; cached copy when offline.
-  if (req.mode === 'navigate') {
+  // App page: network first so updates arrive; fall back to cache after 3 s or when offline,
+  // so weak gym signal doesn't stall launch.
+  if (req.mode === "navigate") {
+    const net = fetch(req).then(res => {
+      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put("index.html", copy)); }
+      return res;
+    });
+    const slow = new Promise(r => setTimeout(r, 3000)).then(() => caches.match("index.html"));
     e.respondWith(
-      fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' })
-        .then(res => { if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put('./index.html', copy)); } return res; })
-        .catch(() => caches.match('./index.html'))
+      Promise.race([net.catch(() => caches.match("index.html")), slow.then(c => c || net)])
+        .then(r => r || net)
     );
     return;
   }
 
-  // Fonts, icons: serve from cache, refresh in background.
+  // Everything else (icons, fonts, React from unpkg): cache first.
   e.respondWith(
-    caches.match(req).then(hit => {
-      const net = fetch(req).then(res => {
-        if (res.ok || res.type === 'opaque') { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
-        return res;
-      }).catch(() => hit || Response.error());
-      return hit || net;
-    })
+    caches.match(req).then(hit => hit || fetch(req).then(res => {
+      if (res.ok || res.type === "opaque") { const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); }
+      return res;
+    }))
   );
 });
