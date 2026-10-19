@@ -1,9 +1,9 @@
 // Bump VERSION on every upload so phones fetch the new app.
-const VERSION = "gt-2.4.2";
+const VERSION = "gt-2.5.1";
 const CORE = ["./", "index.html", "manifest.json", "icon-180.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE.map(u => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", e => {
@@ -22,7 +22,8 @@ self.addEventListener("fetch", e => {
   // App page: network first so updates arrive; fall back to cache after 3 s or when offline,
   // so weak gym signal doesn't stall launch.
   if (req.mode === "navigate") {
-    const net = fetch(req).then(res => {
+    // Skip the browser's HTTP cache (GitHub Pages holds pages ~10 min) so a new upload shows on next launch.
+    const net = fetch(req.url, { cache: "no-cache", credentials: "same-origin" }).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put("index.html", copy)); }
       return res;
     });
