@@ -1,5 +1,5 @@
 // Bump VERSION on every upload so phones fetch the new app.
-const VERSION = "gt-2.0.0";
+const VERSION = "gt-2.4.0";
 const CORE = ["./", "index.html", "manifest.json", "icon-180.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -19,12 +19,17 @@ self.addEventListener("fetch", e => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // App page: network first so updates arrive, cache when offline.
+  // App page: network first so updates arrive; fall back to cache after 3 s or when offline,
+  // so weak gym signal doesn't stall launch.
   if (req.mode === "navigate") {
+    const net = fetch(req).then(res => {
+      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then(c => c.put("index.html", copy)); }
+      return res;
+    });
+    const slow = new Promise(r => setTimeout(r, 3000)).then(() => caches.match("index.html"));
     e.respondWith(
-      fetch(req)
-        .then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put("index.html", copy)); return res; })
-        .catch(() => caches.match("index.html"))
+      Promise.race([net.catch(() => caches.match("index.html")), slow.then(c => c || net)])
+        .then(r => r || net)
     );
     return;
   }
