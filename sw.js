@@ -1,5 +1,5 @@
 // Bump VERSION on every upload so phones fetch the new app.
-const VERSION = "gt-2.4.1";
+const VERSION = "gt-2.4.2";
 const CORE = ["./", "index.html", "manifest.json", "icon-180.png", "icon-512.png"];
 
 self.addEventListener("install", e => {
